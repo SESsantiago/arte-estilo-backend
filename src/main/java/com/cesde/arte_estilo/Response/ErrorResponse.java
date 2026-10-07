@@ -1,5 +1,4 @@
-package com.cesde.arteestilo.exception;
-
+package com.cesde.arte_estilo.Response;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;

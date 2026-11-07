@@ -12,4 +12,10 @@ public interface PedidoRepository extends JpaRepository<Pedido, Long> {
 
     /** Query Method derivado: pedidos de un usuario filtrados por estado. */
     List<Pedido> findByUsuarioIdAndEstado(Long usuarioId, EstadoPedido estado);
+
+    List<Pedido> findByUsuarioIdOrderByFechaCreacionDesc(Long usuarioId);
+
+    List<Pedido> findByEstadoOrderByFechaCreacionDesc(EstadoPedido estado);
+
+    List<Pedido> findAllByOrderByFechaCreacionDesc();
 }

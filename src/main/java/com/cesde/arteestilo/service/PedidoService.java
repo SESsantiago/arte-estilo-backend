@@ -34,12 +34,6 @@ public class PedidoService {
         this.usuarioRepository = usuarioRepository;
     }
 
-    /**
-     * REGLA 1 - Validación y deducción de stock al crear un pedido.
-     * Si algún producto no tiene stock suficiente lanza StockInsuficienteException (HTTP 400).
-     * Si todo es válido, descuenta el stock, calcula el total (Regla 2) y persiste el pedido
-     * con sus detalles (cascade ALL).
-     */
     @Transactional
     public PedidoResponse crearPedido(PedidoRequest dto) {
         Usuario usuario = usuarioRepository.findById(dto.usuarioId())
@@ -51,6 +45,7 @@ public class PedidoService {
         Pedido pedido = new Pedido();
         pedido.setUsuario(usuario);
         pedido.setEstado(EstadoPedido.PENDIENTE);
+        pedido.setEstadoPago(EstadoPago.PENDIENTE);
         pedido.setDireccionEnvio(new DireccionEnvio(
                 d.direccion(), d.ciudad(), d.departamento(), d.referencia()));
 
@@ -72,14 +67,18 @@ public class PedidoService {
             producto.setStock(producto.getStock() - item.cantidad());
             productoRepository.save(producto);
 
+            BigDecimal precioEfectivo = (producto.getPrecioDescuento() != null && producto.getPrecioDescuento().signum() > 0)
+                    ? producto.getPrecioDescuento()
+                    : producto.getPrecio();
+
             DetallePedido detalle = new DetallePedido();
             detalle.setPedido(pedido);
             detalle.setProducto(producto);
             detalle.setCantidad(item.cantidad());
-            detalle.setPrecioUnitario(producto.getPrecio());
+            detalle.setPrecioUnitario(precioEfectivo);
             pedido.getDetalles().add(detalle);
 
-            total = total.add(producto.getPrecio().multiply(BigDecimal.valueOf(item.cantidad())));
+            total = total.add(precioEfectivo.multiply(BigDecimal.valueOf(item.cantidad())));
         }
 
         // ---- Regla 2: descuento ----
@@ -88,10 +87,6 @@ public class PedidoService {
         return toResponse(pedidoRepository.save(pedido));
     }
 
-    /**
-     * REGLA 2 - Descuento del 10% si el total supera $2.000.000 COP.
-     * Si el total es nulo o negativo lanza MontoInvalidoException (HTTP 400).
-     */
     private BigDecimal aplicarDescuento(BigDecimal total) {
         if (total == null || total.signum() < 0) {
             throw new MontoInvalidoException("El monto total del pedido no puede ser negativo");
@@ -103,11 +98,6 @@ public class PedidoService {
         return total.setScale(2, RoundingMode.HALF_UP);
     }
 
-    /**
-     * REGLA 3 - ENDPOINT PERSONALIZADO 1: cancelación según estado.
-     * Solo se cancelan pedidos PENDIENTES; de lo contrario lanza
-     * PedidoNoCancelableException (HTTP 400). Al cancelar reintegra el stock.
-     */
     @Transactional
     public PedidoResponse cancelarPedido(Long pedidoId) {
         Pedido pedido = buscar(pedidoId);
@@ -122,30 +112,40 @@ public class PedidoService {
             productoRepository.save(producto);
         }
         pedido.setEstado(EstadoPedido.CANCELADO);
+        pedido.setEstadoPago(EstadoPago.CANCELADO);
+        if (pedido.getTransaccionPago() != null) {
+            pedido.getTransaccionPago().setEstado(EstadoPago.CANCELADO);
+        }
         return toResponse(pedidoRepository.save(pedido));
     }
 
-    /** PATCH de estado: PENDIENTE -> EN_CAMINO -> ENTREGADO. Para cancelar se usa /cancelar. */
     @Transactional
     public PedidoResponse cambiarEstado(Long id, PedidoEstadoPatch dto) {
         Pedido pedido = buscar(id);
-        EstadoPedido actual = pedido.getEstado();
-        EstadoPedido nuevo = dto.estado();
-        boolean valido = (actual == EstadoPedido.PENDIENTE && nuevo == EstadoPedido.EN_CAMINO)
-                || (actual == EstadoPedido.EN_CAMINO && nuevo == EstadoPedido.ENTREGADO);
-        if (!valido) {
-            throw new IllegalArgumentException("Transición no permitida: " + actual + " -> " + nuevo
-                    + ". El flujo es PENDIENTE -> EN_CAMINO -> ENTREGADO; para cancelar use /cancelar");
+        if (dto.estado() != null) {
+            pedido.setEstado(dto.estado());
         }
-        pedido.setEstado(nuevo);
+        if (dto.estadoPago() != null) {
+            pedido.setEstadoPago(dto.estadoPago());
+            if (pedido.getTransaccionPago() != null) {
+                pedido.getTransaccionPago().setEstado(dto.estadoPago());
+            }
+        }
         return toResponse(pedidoRepository.save(pedido));
     }
 
     @Transactional(readOnly = true)
     public List<PedidoResponse> listar(Long usuarioId, EstadoPedido estado) {
-        List<Pedido> pedidos = (usuarioId != null && estado != null)
-                ? pedidoRepository.findByUsuarioIdAndEstado(usuarioId, estado)
-                : pedidoRepository.findAll();
+        List<Pedido> pedidos;
+        if (usuarioId != null && estado != null) {
+            pedidos = pedidoRepository.findByUsuarioIdAndEstado(usuarioId, estado);
+        } else if (usuarioId != null) {
+            pedidos = pedidoRepository.findByUsuarioIdOrderByFechaCreacionDesc(usuarioId);
+        } else if (estado != null) {
+            pedidos = pedidoRepository.findByEstadoOrderByFechaCreacionDesc(estado);
+        } else {
+            pedidos = pedidoRepository.findAllByOrderByFechaCreacionDesc();
+        }
         return pedidos.stream().map(this::toResponse).toList();
     }
 
@@ -160,7 +160,7 @@ public class PedidoService {
                         "Pedido no encontrado con id " + id));
     }
 
-    private PedidoResponse toResponse(Pedido p) {
+    public PedidoResponse toResponse(Pedido p) {
         DireccionEnvio d = p.getDireccionEnvio();
         DireccionEnvioDTO direccion = (d == null) ? null : new DireccionEnvioDTO(
                 d.getDireccion(), d.getCiudad(), d.getDepartamento(), d.getReferencia());
@@ -169,13 +169,25 @@ public class PedidoService {
                 .map(x -> new DetallePedidoResponse(
                         x.getProducto().getId(),
                         x.getProducto().getNombre(),
+                        x.getProducto().getImagenUrl(),
+                        x.getProducto().getCategoria() != null ? x.getProducto().getCategoria().getNombre() : "Colección",
                         x.getCantidad(),
                         x.getPrecioUnitario(),
                         x.getPrecioUnitario().multiply(BigDecimal.valueOf(x.getCantidad()))))
                 .toList();
 
         return new PedidoResponse(
-                p.getId(), p.getUsuario().getId(), p.getUsuario().getNombre(),
-                p.getEstado(), p.getTotalCompra(), direccion, detalles, p.getFechaCreacion());
+                p.getId(),
+                p.getUsuario().getId(),
+                p.getUsuario().getNombre(),
+                p.getUsuario().getCorreo(),
+                p.getEstado(),
+                p.getEstadoPago() != null ? p.getEstadoPago() : EstadoPago.PENDIENTE,
+                p.getMetodoPago(),
+                p.getReferenciaPago(),
+                p.getTotalCompra(),
+                direccion,
+                detalles,
+                p.getFechaCreacion());
     }
 }

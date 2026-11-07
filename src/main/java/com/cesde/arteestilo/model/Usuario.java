@@ -21,8 +21,19 @@ public class Usuario extends BaseEntity {
     @Column(nullable = false, unique = true, length = 150)
     private String correo;
 
+    @Column(name = "password_hash", length = 255)
+    private String passwordHash;
+
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20, columnDefinition = "varchar(20) default 'USUARIO'")
+    private RolUsuario rol = RolUsuario.USUARIO;
+
     @Column(length = 20)
     private String telefono;
+
+    @Column(length = 80)
+    private String ciudad;
 
     /** Relación 1:1 con PerfilUsuario. Usuario es el lado dueño (FK en perfil). */
     @OneToOne(cascade = CascadeType.ALL, orphanRemoval = true)

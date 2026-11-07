@@ -12,10 +12,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/productos")
-@Tag(name = "Productos", description = "Catálogo de productos")
+@Tag(name = "Productos", description = "Catálogo y administración dinámica de cards de productos")
 public class ProductoController {
 
     private final ProductoService productoService;
@@ -26,11 +27,19 @@ public class ProductoController {
 
     @GetMapping
     @Operation(summary = "Listar productos activos",
-            description = "Filtros opcionales: categoria (nombre) o minStock (stock mayor al valor)")
+            description = "Filtros opcionales: categoria, minStock, destacado, enOferta")
     public ResponseEntity<List<ProductoResponse>> listar(
             @RequestParam(required = false) String categoria,
-            @RequestParam(required = false) Integer minStock) {
-        return ResponseEntity.ok(productoService.listar(categoria, minStock));
+            @RequestParam(required = false) Integer minStock,
+            @RequestParam(required = false) Boolean destacado,
+            @RequestParam(required = false) Boolean enOferta) {
+        return ResponseEntity.ok(productoService.listar(categoria, minStock, destacado, enOferta));
+    }
+
+    @GetMapping("/admin")
+    @Operation(summary = "[Admin] Listar todos los productos (activos e inactivos)")
+    public ResponseEntity<List<ProductoResponse>> listarTodosAdmin() {
+        return ResponseEntity.ok(productoService.listarTodosAdmin());
     }
 
     @GetMapping("/bajo-stock")
@@ -44,11 +53,11 @@ public class ProductoController {
     @GetMapping("/{id}")
     @Operation(summary = "Obtener un producto por id")
     public ResponseEntity<ProductoResponse> obtener(@PathVariable Long id) {
-        return ResponseEntity.ok(productoService.obtener(id));
+        return ResponseEntity.ok(productoService.obtenerCualquiera(id));
     }
 
     @PostMapping
-    @Operation(summary = "Crear un producto")
+    @Operation(summary = "Crear un producto (card)")
     public ResponseEntity<ProductoResponse> crear(@Valid @RequestBody ProductoRequest dto) {
         return ResponseEntity.status(HttpStatus.CREATED).body(productoService.crear(dto));
     }
@@ -65,6 +74,14 @@ public class ProductoController {
     public ResponseEntity<ProductoResponse> actualizarParcial(@PathVariable Long id,
                                                               @Valid @RequestBody ProductoPatch dto) {
         return ResponseEntity.ok(productoService.actualizarParcial(id, dto));
+    }
+
+    @PatchMapping("/{id}/estado")
+    @Operation(summary = "Activar o desactivar una card de producto")
+    public ResponseEntity<ProductoResponse> cambiarEstado(@PathVariable Long id,
+                                                          @RequestBody Map<String, Boolean> body) {
+        boolean activo = body.getOrDefault("estadoActivo", true);
+        return ResponseEntity.ok(productoService.cambiarEstadoActivo(id, activo));
     }
 
     @DeleteMapping("/{id}")

@@ -1,5 +1,6 @@
 package com.cesde.arteestilo.controller;
 
+import com.cesde.arteestilo.dto.ProductoResponse;
 import com.cesde.arteestilo.dto.UsuarioPatch;
 import com.cesde.arteestilo.dto.UsuarioRequest;
 import com.cesde.arteestilo.dto.UsuarioResponse;
@@ -15,7 +16,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/usuarios")
-@Tag(name = "Usuarios", description = "Gestión de usuarios y sus perfiles")
+@Tag(name = "Usuarios", description = "Gestión de usuarios, perfiles, roles y favoritos")
 public class UsuarioController {
 
     private final UsuarioService usuarioService;
@@ -25,7 +26,7 @@ public class UsuarioController {
     }
 
     @GetMapping
-    @Operation(summary = "Listar usuarios activos")
+    @Operation(summary = "Listar usuarios")
     public ResponseEntity<List<UsuarioResponse>> listar() {
         return ResponseEntity.ok(usuarioService.listar());
     }
@@ -63,10 +64,23 @@ public class UsuarioController {
         return ResponseEntity.noContent().build();
     }
 
-    // ENDPOINT PERSONALIZADO: Búsqueda por correo exacto
     @GetMapping("/buscar")
     @Operation(summary = "[Personalizado] Buscar usuario por correo")
     public ResponseEntity<UsuarioResponse> buscarPorCorreo(@RequestParam String correo) {
         return ResponseEntity.ok(usuarioService.buscarPorCorreo(correo));
+    }
+
+    @GetMapping("/{id}/favoritos")
+    @Operation(summary = "Listar productos favoritos de un usuario")
+    public ResponseEntity<List<ProductoResponse>> listarFavoritos(@PathVariable Long id) {
+        return ResponseEntity.ok(usuarioService.listarFavoritos(id));
+    }
+
+    @PostMapping("/{id}/favoritos/{productoId}")
+    @Operation(summary = "Agregar o quitar un producto de favoritos")
+    public ResponseEntity<List<ProductoResponse>> toggleFavorito(
+            @PathVariable Long id,
+            @PathVariable Long productoId) {
+        return ResponseEntity.ok(usuarioService.toggleFavorito(id, productoId));
     }
 }

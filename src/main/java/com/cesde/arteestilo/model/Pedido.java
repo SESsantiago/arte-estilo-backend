@@ -23,6 +23,17 @@ public class Pedido extends BaseEntity {
     @Column(nullable = false, length = 20)
     private EstadoPedido estado;
 
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "estado_pago", nullable = false, length = 20, columnDefinition = "varchar(20) default 'PENDIENTE'")
+    private EstadoPago estadoPago = EstadoPago.PENDIENTE;
+
+    @Column(name = "metodo_pago", length = 60)
+    private String metodoPago;
+
+    @Column(name = "referencia_pago", length = 60)
+    private String referenciaPago;
+
     /** Componente embebido: las columnas de DireccionEnvio viven en esta tabla. */
     @Embedded
     private DireccionEnvio direccionEnvio;
@@ -36,4 +47,7 @@ public class Pedido extends BaseEntity {
     @Builder.Default
     @OneToMany(mappedBy = "pedido", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<DetallePedido> detalles = new ArrayList<>();
+
+    @OneToOne(mappedBy = "pedido", cascade = CascadeType.ALL)
+    private TransaccionPago transaccionPago;
 }

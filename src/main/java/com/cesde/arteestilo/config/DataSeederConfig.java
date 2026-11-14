@@ -76,6 +76,18 @@ public class DataSeederConfig {
                     "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&auto=format"
             );
 
+            asegurarUsuario(
+                    usuarioRepository,
+                    "Cliente Arte & Estilo",
+                    "cliente@arteyestilo.co",
+                    "Cliente123*",
+                    RolUsuario.USUARIO,
+                    "300 222 3344",
+                    "Medellín",
+                    "Cliente registrado en Arte & Estilo",
+                    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&auto=format"
+            );
+
             // Actualizar usuarios antiguos sin contraseña o rol
             usuarioRepository.findAll().forEach(u -> {
                 boolean changed = false;
